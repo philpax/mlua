@@ -57,6 +57,9 @@ pub struct RawLua {
     pub(super) state: Cell<*mut ffi::lua_State>,
     pub(super) main_state: Option<NonNull<ffi::lua_State>>,
     pub(super) extra: ManuallyDrop<XRc<UnsafeCell<ExtraData>>>,
+    /// Set when an external owner (LÖVR) closes the underlying C state, so
+    /// value drops that would poke the freed ref thread are skipped.
+    pub(super) closed: Cell<bool>,
     owned: bool,
 }
 
@@ -127,6 +130,18 @@ impl RawLua {
     #[inline(always)]
     pub(crate) fn ref_thread(&self) -> *mut ffi::lua_State {
         unsafe { (*self.extra.get()).ref_thread }
+    }
+
+    /// Marks this state as closed by an external owner (e.g. LÖVR's
+    /// `luax_close`), so that later value drops do not touch the freed
+    /// ref thread. Used by `boot.rs` after `luax_close` runs.
+    pub fn mark_closed(&self) {
+        self.closed.set(true);
+    }
+
+    /// Whether an external owner has closed the underlying C state.
+    pub(crate) fn is_closed(&self) -> bool {
+        self.closed.get()
     }
 
     pub(super) unsafe fn new(libs: StdLib, options: &LuaOptions) -> XRc<ReentrantMutex<Self>> {
@@ -258,6 +273,7 @@ impl RawLua {
             // Make sure that we don't store current state as main state (if it's not available)
             main_state: get_main_state(state).and_then(NonNull::new),
             extra: ManuallyDrop::new(XRc::clone(&extra)),
+            closed: Cell::new(false),
             owned,
         }));
         (*extra.get()).set_lua(&rawlua);
@@ -1055,6 +1071,12 @@ impl RawLua {
 
     pub(crate) unsafe fn drop_ref(&self, vref: &ValueRef) {
         let ref_thread = self.ref_thread();
+        // If an external owner (LÖVR) is closing the state, the ref thread may
+        // already be freed; only mark the index free rather than poking it.
+        if self.is_closed() {
+            (*self.extra.get()).ref_free.push(vref.index);
+            return;
+        }
         mlua_debug_assert!(
             ffi::lua_gettop(ref_thread) >= vref.index,
             "GC finalizer is not allowed in ref_thread"

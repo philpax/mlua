@@ -2513,7 +2513,14 @@ impl WeakLua {
     #[inline(always)]
     pub(crate) fn try_lock(&self) -> Option<LuaGuard> {
         // Reference cleanup must remain possible during Luau GC.
-        Some(LuaGuard::new(self.0.upgrade()?))
+        let guard = LuaGuard::new(self.0.upgrade()?);
+        // If an external owner (LÖVR) closed the C state, treat the Lua
+        // instance as destroyed so value drops skip touching the freed
+        // ref thread.
+        if guard.is_closed() {
+            return None;
+        }
+        Some(guard)
     }
 
     /// Upgrades the weak Lua reference to a strong reference.

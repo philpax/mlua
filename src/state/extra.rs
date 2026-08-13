@@ -139,7 +139,14 @@ impl ExtraData {
         let ref_thread = mlua_expect!(
             protect_lua!(state, 0, 0, |state| {
                 let thread = ffi::lua_newthread(state);
-                ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX);
+                // Pin the ref thread under a string key rather than a numeric registry
+                // ref: numeric refs are reused by `RegistryKey`/`luaL_ref` traffic, which
+                // could clobber the pin and let the GC collect the thread. With Luau the
+                // reference index arithmetic (`LUA_REGISTRYINDEX = -LUAI_MAXCSTACK - 2000`)
+                // makes a numeric slot-1 collision easy to trigger.
+                ffi::lua_pushvalue(state, -1);
+                const REF_THREAD_KEY: &[u8] = b"__mlua_ref_thread\0";
+                ffi::lua_setfield(state, ffi::LUA_REGISTRYINDEX, REF_THREAD_KEY.as_ptr().cast());
                 thread
             }),
             "Error while creating ref thread",
