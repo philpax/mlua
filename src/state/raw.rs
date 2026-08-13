@@ -1067,10 +1067,10 @@ impl RawLua {
     #[inline]
     pub(crate) unsafe fn push_error_traceback(&self) {
         let state = self.state();
-        #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
-        ffi::lua_xpush(self.ref_thread(), state, ExtraData::ERROR_TRACEBACK_IDX);
-        // Lua 5.2+ support light C functions that does not require extra allocations
-        #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52"))]
+        // lunette fork: the luau path here used `lua_xpush(ref_thread, state,
+        // ERROR_TRACEBACK_IDX)`, but the fork's `lua_xpush` traps on the
+        // reference-thread value under a LÖVR-created session state. Pushing a
+        // fresh C function is equivalent and touches no cross-thread state.
         ffi::lua_pushcfunction(state, crate::util::error_traceback);
     }
 

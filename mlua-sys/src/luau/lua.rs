@@ -67,13 +67,18 @@ pub const LUA_TLIGHTUSERDATA: c_int = 2;
 pub const LUA_TNUMBER: c_int = 3;
 pub const LUA_TINTEGER: c_int = 4;
 pub const LUA_TVECTOR: c_int = 5;
+// lunette fork: the LÖVR Luau fork (`philpax/luau`, from `bjornbytes/luau`) inserts
+// `LUA_TQUATERNION` as a value type after `LUA_TVECTOR`, shifting every
+// following tag up by one. These constants must match the fork's runtime or
+// mlua misreads `lua_type()` results (a function reads as a userdata).
+pub const LUA_TQUATERNION: c_int = 6;
 
-pub const LUA_TSTRING: c_int = 6;
-pub const LUA_TTABLE: c_int = 7;
-pub const LUA_TFUNCTION: c_int = 8;
-pub const LUA_TUSERDATA: c_int = 9;
-pub const LUA_TTHREAD: c_int = 10;
-pub const LUA_TBUFFER: c_int = 11;
+pub const LUA_TSTRING: c_int = 7;
+pub const LUA_TTABLE: c_int = 8;
+pub const LUA_TFUNCTION: c_int = 9;
+pub const LUA_TUSERDATA: c_int = 10;
+pub const LUA_TTHREAD: c_int = 11;
+pub const LUA_TBUFFER: c_int = 12;
 
 /// Guaranteed number of Lua stack slots available to a C function.
 pub const LUA_MINSTACK: c_int = 20;
@@ -318,6 +323,10 @@ unsafe extern "C-unwind" {
 //
 unsafe extern "C-unwind" {
     pub fn lua_error(L: *mut lua_State) -> !;
+    // lunette fork: the LÖVR Luau fork exposes whether the VM is at the
+    // outermost Lua frame, which the lunctl budget interrupt uses to decide
+    // whether raising is safe.
+    pub fn lua_vm_is_topframe(L: *mut lua_State) -> c_int;
     pub fn lua_next(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_rawiter(L: *mut lua_State, idx: c_int, iter: c_int) -> c_int;
     pub fn lua_concat(L: *mut lua_State, n: c_int);
